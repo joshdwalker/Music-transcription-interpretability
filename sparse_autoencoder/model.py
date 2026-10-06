@@ -34,7 +34,7 @@ class Autoencoder(nn.Module):
         super().__init__()
 
         self.pre_bias = nn.Parameter(torch.zeros(n_inputs))
-        self.encoder: nn.Module = nn.Linear(n_inputs, n_latents, bias=False)
+        self.encoder = nn.Linear(n_inputs, n_latents, bias=False)
         self.latent_bias = nn.Parameter(torch.zeros(n_latents))
         self.activation = activation
         if tied:
@@ -110,7 +110,7 @@ class Autoencoder(nn.Module):
 
     @classmethod
     def from_state_dict(
-        cls, state_dict: dict[str, torch.Tensor], strict: bool = True
+        cls, state_dict: dict[str, Any], strict: bool = True
     ) -> "Autoencoder":
         n_latents, d_model = state_dict["encoder.weight"].shape
 
@@ -133,8 +133,10 @@ class Autoencoder(nn.Module):
         autoencoder.load_state_dict(state_dict, strict=strict)
         return autoencoder
 
-    def state_dict(self, destination=None, prefix="", keep_vars=False):
-        sd = super().state_dict(destination, prefix, keep_vars)
+    # Override state_dict to include activation class name and its state dict
+    # Does not use the destination argument
+    def state_dict(self, destination: dict[str, Any] | None = None, prefix="", keep_vars=False):
+        sd = super().state_dict(prefix=prefix, keep_vars=keep_vars)
         sd[prefix + "activation"] = self.activation.__class__.__name__
         if hasattr(self.activation, "state_dict"):
             sd[prefix + "activation_state_dict"] = self.activation.state_dict()
@@ -173,13 +175,13 @@ class TopK(nn.Module):
         result.scatter_(-1, topk.indices, values)
         return result
 
-    def state_dict(self, destination=None, prefix="", keep_vars=False):
-        state_dict = super().state_dict(destination, prefix, keep_vars)
+    def state_dict(self, destination: dict[str, Any] | None = None, prefix="", keep_vars=False):
+        state_dict = super().state_dict(prefix=prefix, keep_vars=keep_vars)
         state_dict.update({prefix + "k": self.k, prefix + "postact_fn": self.postact_fn.__class__.__name__})
         return state_dict
 
     @classmethod
-    def from_state_dict(cls, state_dict: dict[str, torch.Tensor], strict: bool = True) -> "TopK":
+    def from_state_dict(cls, state_dict: dict[str, Any], strict: bool = True) -> "TopK":
         k = state_dict["k"]
         postact_fn = ACTIVATIONS_CLASSES[state_dict["postact_fn"]]()
         return cls(k=k, postact_fn=postact_fn)

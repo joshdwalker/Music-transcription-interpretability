@@ -186,7 +186,8 @@ def make_torch_comms(n_op_shards=4, n_replicas=2):
         assert n_replicas == 1
         return TRIVIAL_COMMS
 
-    rank = int(os.environ.get("RANK"))
+    # os.environ.get("RANK") should never return None; this is handled above
+    rank = int(os.environ.get("RANK", "0"))
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     os.environ["CUDA_VISIBLE_DEVICES"] = str(rank % 8)
 
@@ -213,8 +214,9 @@ def make_torch_comms(n_op_shards=4, n_replicas=2):
     torch.distributed.all_reduce(torch.ones(1).cuda())
     torch.cuda.synchronize()
 
-    dp_comm = Comm(group=my_replica_group)
-    sh_comm = Comm(group=my_shard_group)
+    # dist.new_group(replica_rank_list) should never return -100
+    dp_comm = Comm(group=my_replica_group) # type: ignore
+    sh_comm = Comm(group=my_shard_group) # type: ignore
 
     return ShardingComms(
         n_replicas=n_replicas,
@@ -552,7 +554,7 @@ class Logger:
 
 
 def training_loop_(
-    ae, train_acts_iter, loss_fn, lr, comms, eps=6.25e-10, clip_grad=None, ema_multiplier=0.999, logger=None
+    ae, train_acts_iter, loss_fn, lr, comms, eps=6.25e-10, clip_grad=None, ema_multiplier: float | None = 0.999, logger=None
 ):
     if logger is None:
         logger = Logger(dummy=True)
@@ -599,7 +601,8 @@ def training_loop_(
             grad_norm = sharded_grad_norm(ae, comms)
             logger.logkv("grad_norm", grad_norm)
             grads = [x.grad for x in ae.parameters() if x.grad is not None]
-            torch._foreach_mul_(grads, clip_grad / torch.clamp(grad_norm, min=clip_grad))
+            for grad in grads:
+                grad.mul_(clip_grad / torch.clamp(grad_norm, min=clip_grad))
 
         if ema_multiplier is not None:
             ema.step()
@@ -658,11 +661,11 @@ class EmaModel:
         self.ema_steps = 0
 
     def step(self):
-        torch._foreach_lerp_(
-            self.ema_weights,
-            list(self.model.parameters()),
-            1 - self.ema_multiplier,
-        )
+        with torch.no_grad():
+            for ema_weight, parameter in zip(
+                self.ema_weights, self.model.parameters(), strict=True
+            ):
+                ema_weight.lerp_(parameter, 1 - self.ema_multiplier)
         self.ema_steps += 1
 
     # context manager for setting the autoencoder weights to the EMA weights
@@ -672,7 +675,9 @@ class EmaModel:
 
         # apply bias correction
         bias_correction = 1 - self.ema_multiplier**self.ema_steps
-        ema_weights_bias_corrected = torch._foreach_div(self.ema_weights, bias_correction)
+        ema_weights_bias_corrected = [
+            weight / bias_correction for weight in self.ema_weights
+        ]
 
         with torch.no_grad():
             with temporary_weight_swap(self.model, ema_weights_bias_corrected):
@@ -706,6 +711,7 @@ def main():
     comms = make_torch_comms(n_op_shards=cfg.n_op_shards, n_replicas=cfg.n_replicas)
 
     ## dataloading is left as an exercise for the reader
+    # TO-DO: Implement dataloading
     acts_iter = ...
     stats_acts_sample = ...
 

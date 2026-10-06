@@ -75,8 +75,8 @@ def triton_coo_sparse_dense_matmul(
         B=B,
         N=N,
         AK=AK,
-        BLOCK_SIZE_AK=BLOCK_SIZE_AK,
-        BLOCK_SIZE_B=triton.next_power_of_2(B),
+        BLOCK_SIZE_AK=tl.constexpr(BLOCK_SIZE_AK),
+        BLOCK_SIZE_B=tl.constexpr(triton.next_power_of_2(B)),
     )
     return out
 
@@ -210,8 +210,8 @@ def triton_sparse_dense_matmul(
         B=B,
         N=N,
         K=K,
-        BLOCK_SIZE_K=triton.next_power_of_2(K),
-        BLOCK_SIZE_B=triton.next_power_of_2(B),
+        BLOCK_SIZE_K=tl.constexpr(triton.next_power_of_2(K)),
+        BLOCK_SIZE_B=tl.constexpr(triton.next_power_of_2(B)),
     )
     return out
 
@@ -325,9 +325,9 @@ def triton_dense_dense_sparseout_matmul(
         B=B,
         N=N,
         K=K,
-        BLOCK_SIZE_B=triton.next_power_of_2(B),
-        BLOCK_SIZE_N=triton.next_power_of_2(N),
-        BLOCK_SIZE_K=triton.next_power_of_2(K),
+        BLOCK_SIZE_B=tl.constexpr(triton.next_power_of_2(B)),
+        BLOCK_SIZE_N=tl.constexpr(triton.next_power_of_2(N)),
+        BLOCK_SIZE_K=tl.constexpr(triton.next_power_of_2(K)),
     )
 
     return out
@@ -417,7 +417,7 @@ class TritonDecoderAutograd(torch.autograd.Function):
             None,
         )
 
-
+'''
 def triton_add_mul_(
     x: torch.Tensor,
     a: torch.Tensor,
@@ -459,11 +459,12 @@ def triton_add_mul_(
         a.stride(1),
         b.stride(0),
         b.stride(1),
-        BLOCK_SIZE_M,
-        BLOCK_SIZE_N,
-        x.shape[0],
-        x.shape[1],
+        tl.constexpr(BLOCK_SIZE_M),
+        tl.constexpr(BLOCK_SIZE_N),
+        tl.constexpr(x.shape[0]),
+        tl.constexpr(x.shape[1]),
     )
+'''
 
 
 @triton.jit
@@ -532,8 +533,8 @@ def triton_sum_dim0_in_fp32(xs):
         stride_a=xs.stride(0),
         a=a,
         b=b,
-        BLOCK_SIZE_A=BLOCK_SIZE_A,
-        BLOCK_SIZE_B=BLOCK_SIZE_B,
+        BLOCK_SIZE_A=tl.constexpr(BLOCK_SIZE_A),
+        BLOCK_SIZE_B=tl.constexpr(BLOCK_SIZE_B),
     )
 
     return out
@@ -596,7 +597,7 @@ def mse(
                 stride_a_target=target.stride(0),
                 a=a,
                 b=b,
-                BLOCK_SIZE_B=BLOCK_SIZE_B,
+                BLOCK_SIZE_B=tl.constexpr(BLOCK_SIZE_B),
             )
 
             return out
@@ -698,8 +699,8 @@ def triton_add_mul_(
         a.stride(1),
         b.stride(0),
         b.stride(1),
-        BLOCK_SIZE_M,
-        BLOCK_SIZE_N,
-        x.shape[0],
-        x.shape[1],
+        tl.constexpr(BLOCK_SIZE_M),
+        tl.constexpr(BLOCK_SIZE_N),
+        tl.constexpr(x.shape[0]),
+        tl.constexpr(x.shape[1]),
     )
