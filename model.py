@@ -9,12 +9,13 @@ def LN(x: torch.Tensor, eps=1e-5):
     x = x / (std + eps)
     return x, mu, std
 
-class AutoEncoder(torch.Module):
+# This autoencoder always uses top-k activation
+class Autoencoder(torch.Module):
     def __init__(
             self,
             input_dimension=768,
             latent_dimension=50000,
-            activation=torch.topk,
+            k=48,
             tied=False,
             normalize=False
     ):
@@ -23,7 +24,7 @@ class AutoEncoder(torch.Module):
         self.pre_bias = nn.Parameter(torch.zeros(input_dimension))
         self.encoder = nn.Linear(input_dimension, latent_dimension, bias=False)
         self.latent_bias = nn.Parameter(torch.zeros(latent_dimension))
-        self.activation = activation
+        self.k = k
 
         if tied:
             self.decoder = TiedTranspose(self.encoder)
@@ -52,7 +53,7 @@ class AutoEncoder(torch.Module):
     # Returns a tuple of (latent representation, dict(mu=mean, std=std) or empty dict)
     def encode(self, x):
         x, info = self.preprocess(x)
-        return self.activation(self.encode_pre_act(x)), info
+        return torch.topk(self.encode_pre_act(x), k=self.k, dim=-1), info
 
     # Decodes and unnormalizes the latent representation
     def decode(self, latents, info):
@@ -67,7 +68,7 @@ class AutoEncoder(torch.Module):
     def forward(self, x):
         x, info = self.preprocess(x)
         latents_pre_act = self.encode_pre_act(x)
-        latents = self.activation(latents_pre_act)
+        latents = torch.topk(latents_pre_act, k=self.k, dim=-1)
         reconstructed_activation = self.decode(latents, info)
 
         return latents_pre_act, latents, reconstructed_activation
