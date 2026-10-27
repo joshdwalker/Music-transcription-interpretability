@@ -16,8 +16,12 @@ output_dir = 'activations'
 Path(output_dir).mkdir(parents=True, exist_ok=True)
 
 # Requires accepting Muscriptor's model license on Hugging Face.
-transcription_model = TranscriptionModel.load_model("large")
+transcription_model = TranscriptionModel.load_model("large", device='cuda')
 model = transcription_model._model
+# Print to ensure cuda worked
+print("CUDA available:", torch.cuda.is_available())
+print("Model device:", transcription_model._device)
+print("GPU:", torch.cuda.get_device_name(0))
 
 stored_activations: list[torch.Tensor] = []
 

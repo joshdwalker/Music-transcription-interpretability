@@ -1,15 +1,15 @@
 #!/bin/sh -l
 
-#SBATCH -A x-jwalker5
-#SBATCH -p shared
+#SBATCH -A cis240530-gpu
+#SBATCH -p gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=2
-#SBATCH --mem=1G
+#SBATCH --gpus-per-node=1
+#SBATCH --mem=48G
 #SBATCH --job-name collect-muscriptor-activations
 #SBATCH -t 01:00:00  # 1 hour
 
-module load conda
+module load cuda conda
 conda activate .venv
 
 cd /anvil/scratch/x-jwalker5/Music-transcription-interpretability
