@@ -13,4 +13,7 @@ conda activate .venv
 
 cd /scratch/gilbreth/walk1098/Music-transcription-interpretability
 
+pip install -r requirements.txt
+pip install git+https://github.com/muscriptor/muscriptor.git
+
 python ./scripts/test.py

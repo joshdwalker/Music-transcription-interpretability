@@ -1,6 +1,5 @@
 # Model
 huggingface_hub
-muscriptor
 
 # Dependencies
 torch
