@@ -13,4 +13,6 @@ conda activate .venv
 
 cd /scratch/gilbreth/walk1098/Music-transcription-interpretability
 
+pip install -r requirements.txt
+
 python ./scripts/collect_activations.py
