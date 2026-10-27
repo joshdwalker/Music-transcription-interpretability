@@ -2,7 +2,7 @@
 
 #SBATCH --cpus-per-task=8
 #SBATCH --account=yunglu
-#SBATCH --partition=a100-80GB
+#SBATCH --partition=a100-80gb
 #SBATCH --qos=standby
 #SBATCH --time=1:00:00
 #SBATCH --gres=gpu:1
