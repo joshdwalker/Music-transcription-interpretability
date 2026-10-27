@@ -9,7 +9,7 @@
 #SBATCH --job-name collect-muscriptor-activations
 #SBATCH -t 01:00:00  # 1 hour
 
-module load cuda conda
+module load conda
 conda activate .venv
 
 cd /anvil/scratch/x-jwalker5/Music-transcription-interpretability
