@@ -1,5 +1,6 @@
 # Model
 huggingface_hub
+git+https://github.com/muscriptor/muscriptor.git
 
 # Dependencies
 torch
