@@ -41,29 +41,30 @@ def hook_fn(_module, _inputs, output: torch.Tensor) -> None:
 # out_norm is the final normalization before the LM projection. Its output
 # excludes prepended audio-conditioning positions and has shape [batch, tokens, hidden].
 handle = model.out_norm.register_forward_hook(hook_fn)
-for text_path in text_paths:
-    sample_path = Path(text_path)
-    # text_path is of the form /depot/.../(train/test/validation)/Track_____/Track_____.wav
-    output_path = Path(output_dir + text_path[text_path.rindex('/') : text_path.rindex('.')] + '.pt')
-    stored_activations.clear()
+try:
+    with torch.inference_mode():
+        for text_path in text_paths:
+            sample_path = Path(text_path)
+            # text_path is of the form /depot/.../(train/test/validation)/Track_____/Track_____.wav
+            output_path = Path(output_dir + text_path[text_path.rindex('/') : text_path.rindex('.')] + '.pt')
+            stored_activations.clear()
 
-    try:
-        with torch.inference_mode():
             for _ in transcription_model.transcribe(sample_path):
-                pass
-    finally:
-        handle.remove()
+                        pass
 
-    if not stored_activations:
-        raise RuntimeError(f"No activations were captured while transcribing {sample_path}")
+            if not stored_activations:
+                raise RuntimeError(f"No activations were captured while transcribing {sample_path}")
 
-    activations = torch.cat(stored_activations, dim=0)
-    torch.save(
-        {
-            "activations": activations,
-            "audio_path": str(sample_path),
-            "layer": "out_norm",
-        },
-        output_path,
-    )
-    print(f"Saved {activations.shape[0]} token activations to {output_path}")
+            activations = torch.cat(stored_activations, dim=0)
+            torch.save(
+                {
+                    "activations": activations,
+                    "audio_path": str(sample_path),
+                    "layer": "out_norm",
+                },
+                output_path,
+            )
+            print(f"Saved {activations.shape[0]} token activations to {output_path}")
+
+finally:
+    handle.remove()
