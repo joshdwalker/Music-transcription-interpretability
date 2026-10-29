@@ -8,7 +8,7 @@ text_paths = []
 
 with open(text_file) as f:
     for line in f:
-        text_paths.append(line)
+        text_paths.append(line.strip())
 
 # Place each .pt file in activations dir from this repo
 output_dir = 'activations'
