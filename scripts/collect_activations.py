@@ -1,19 +1,32 @@
+import os
 from pathlib import Path
 
 import torch
 from muscriptor import TranscriptionModel
 
-text_file = '/depot/yunglu/data/transcription/slakh2100.txt'
-text_paths = []
-
-with open(text_file) as f:
-    for line in f:
-        text_paths.append(line.strip())
-
 # Place each .pt file in activations dir from this repo
 output_dir = 'activations'
 # Ensure the subdirectory (already or not) exists in this repo
 Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+def collect_text_paths(text_file='/depot/yunglu/data/transcription/slakh2100.txt', dir='activations'):
+    output = []
+
+    with open(text_file) as f:
+        output = []
+
+        for line in f:
+            corresponding_pt_filename = line[line.rfind('/') + 1 : line.rfind('.')] + '.pt'
+
+            # Skip files already present in dir (activations)
+            if os.listdir(dir).__contains__(corresponding_pt_filename):
+                continue
+
+            output.append(line.strip())
+
+        return output
+
+text_paths = collect_text_paths(text_file='/depot/yunglu/data/transcription/slakh2100.txt', dir=output_dir)
 
 # Requires accepting Muscriptor's model license on Hugging Face.
 transcription_model = TranscriptionModel.load_model("large", device='cuda')
