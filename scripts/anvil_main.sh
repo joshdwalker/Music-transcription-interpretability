@@ -14,6 +14,12 @@ conda activate .venv
 
 cd /anvil/scratch/x-jwalker5/Music-transcription-interpretability
 
+mkdir huggingface
+mkdir huggingface/hub
+export HF_HUB_CACHE=/scratch/gilbreth/walk1098/Music-transcription-interpretability/huggingface/hub
+
 pip install -r requirements.txt
 
-python ./scripts/collect_activations.py
+# Usage: python collect_actications.py /path/to/inputs /path/to/output_dir
+#      where inputs is a text file containing absolute paths to every input .wav
+python ./scripts/collect_activations.py slakh2100.txt activations

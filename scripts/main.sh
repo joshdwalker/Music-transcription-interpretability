@@ -19,4 +19,6 @@ export HF_HUB_CACHE=/scratch/gilbreth/walk1098/Music-transcription-interpretabil
 
 pip install -r requirements.txt
 
-python ./scripts/collect_activations.py
+# Usage: python collect_actications.py /path/to/inputs /path/to/output_dir
+#      where inputs is a text file containing absolute paths to every input .wav
+python ./scripts/collect_activations.py /depot/yunglu/data/transcription/slakh2100.txt activations

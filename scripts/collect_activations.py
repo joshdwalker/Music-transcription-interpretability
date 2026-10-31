@@ -1,15 +1,24 @@
+# Usage: python collect_actications.py /path/to/inputs /path/to/output_dir
+#      where inputs is a text file containing absolute paths to every input .wav
+# -Josh W (github joshdwalker)
+
 import os
+import sys
 from pathlib import Path
 
 import torch
 from muscriptor import TranscriptionModel
 
+# Ensure script is used correctly
+if len(sys.argv) != 3:
+    raise Exception(f'Usage: python {__file__[__file__.rindex("/") + 1 : ]} <path/to/inputs> <path/to/output_dir>')
+
 # Place each .pt file in activations dir from this repo
-output_dir = 'activations'
+output_dir = sys.argv[2]
 # Ensure the subdirectory (already or not) exists in this repo
 Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-def collect_text_paths(text_file='/depot/yunglu/data/transcription/slakh2100.txt', dir='activations'):
+def collect_text_paths(text_file, dir):
     output = []
 
     with open(text_file) as f:
@@ -20,13 +29,14 @@ def collect_text_paths(text_file='/depot/yunglu/data/transcription/slakh2100.txt
 
             # Skip files already present in dir (activations)
             if os.listdir(dir).__contains__(corresponding_pt_filename):
+                print(f'Already collected activations for {line}; {corresponding_pt_filename}')
                 continue
 
             output.append(line.strip())
 
         return output
 
-text_paths = collect_text_paths(text_file='/depot/yunglu/data/transcription/slakh2100.txt', dir=output_dir)
+text_paths = collect_text_paths(text_file=sys.argv[1], dir=output_dir)
 
 # Requires accepting Muscriptor's model license on Hugging Face.
 transcription_model = TranscriptionModel.load_model("large", device='cuda')

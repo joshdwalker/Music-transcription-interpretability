@@ -15,3 +15,14 @@ pip install -r requirements.txt
      set the HF_TOKEN environment variable to a read token
           from https://huggingface.co/settings/tokens
      hf auth login --token <your_token>
+
+# Collect the activations which the SAE trains over
+# IMPORTANT: this only needs to be run ONCE ever; check if activations directory exists and is sufficiently full
+
+# Gilbreth
+# slakh2100.txt and slakh2100 should already be in the depot
+sbatch main.sh
+
+# Anvil
+# Ensure you have slakh2100.txt and slakh2100 in this project directory
+sbatch anvil_main.sh
