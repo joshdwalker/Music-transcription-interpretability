@@ -16,7 +16,7 @@ cd /anvil/scratch/x-jwalker5/Music-transcription-interpretability
 
 mkdir huggingface
 mkdir huggingface/hub
-export HF_HUB_CACHE=/scratch/gilbreth/walk1098/Music-transcription-interpretability/huggingface/hub
+export HF_HUB_CACHE=/anvil/scratch/x-jwalker5/Music-transcription-interpretability/huggingface/hub
 
 pip install -r requirements.txt
 
