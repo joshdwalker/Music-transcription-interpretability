@@ -12,6 +12,7 @@
 
 
 import os
+import glob
 from dataclasses import dataclass
 from typing import Callable, Iterable, Iterator
 
@@ -72,7 +73,7 @@ class ShardingComms:
                 return input
 
             @staticmethod
-            def backward(ctx, grad_output):
+            def backward(ctx, grad_output): # type: ignore
                 return grad_output
 
         return AllreduceForward.apply(x)  # type: ignore
@@ -87,8 +88,8 @@ class ShardingComms:
                 return input
 
             @staticmethod
-            def backward(ctx, grad_output):
-                grad_output = grad_output.clone()
+            def backward(ctx, grad_output): # type: ignore
+                grad_output = grad_output[0].clone()
                 assert self.sh_comm is not None
                 self.sh_comm.all_reduce(grad_output, async_op=True)
                 return grad_output
@@ -386,7 +387,7 @@ class FastAutoencoder(nn.Module):
                 )
 
             @staticmethod
-            def backward(ctx, _, grad_vals, __, grad_auxk_vals):
+            def backward(ctx, _, grad_vals, __, grad_auxk_vals): # type: ignore
                 # encoder backwards
                 if self.auxk is not None:
                     x, weight, inds, auxk_inds = ctx.saved_tensors
@@ -563,6 +564,7 @@ def training_loop_(
     autocast_ctx_manager = torch.cuda.amp.autocast()
 
     opt = torch.optim.Adam(ae.parameters(), lr=lr, eps=eps, fused=True)
+    ema = None
     if ema_multiplier is not None:
         ema = EmaModel(ae, ema_multiplier=ema_multiplier)
 
@@ -604,7 +606,7 @@ def training_loop_(
             for grad in grads:
                 grad.mul_(clip_grad / torch.clamp(grad_norm, min=clip_grad))
 
-        if ema_multiplier is not None:
+        if ema_multiplier is not None and ema is not None:
             ema.step()
 
         # take step with optimizer
@@ -710,10 +712,32 @@ def main():
     cfg = Config()
     comms = make_torch_comms(n_op_shards=cfg.n_op_shards, n_replicas=cfg.n_replicas)
 
-    ## dataloading is left as an exercise for the reader
-    # TO-DO: Implement dataloading
-    acts_iter = ...
-    stats_acts_sample = ...
+    activation_files = sorted(glob.glob(os.path.join("activations", "*.pt")))
+    if not activation_files:
+        raise FileNotFoundError("No activation .pt files found in the activations directory")
+
+    def load_activations(path):
+        acts = torch.load(path, map_location="cpu")
+        if not isinstance(acts, torch.Tensor):
+            raise TypeError(f"Expected a tensor in {path}, got {type(acts).__name__}")
+        if acts.shape[-1] != cfg.d_model:
+            raise ValueError(
+                f"Expected activations with final dimension {cfg.d_model}, got {tuple(acts.shape)}"
+            )
+        return acts.reshape(-1, cfg.d_model)
+
+    stats_acts_sample = load_activations(activation_files[0])[:32768]
+
+    def iter_activations():
+        for path in activation_files:
+            acts = load_activations(path)
+            rows_per_replica = acts.shape[0] // cfg.n_replicas
+            if rows_per_replica == 0:
+                continue
+            start = comms.dp_rank * rows_per_replica
+            yield acts[start : start + rows_per_replica]
+
+    acts_iter = iter_activations()
 
     n_dirs_local = cfg.n_dirs // cfg.n_op_shards
     bs_local = cfg.bs // cfg.n_replicas
