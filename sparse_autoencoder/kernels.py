@@ -400,7 +400,7 @@ class TritonDecoderAutograd(torch.autograd.Function):
         return triton_sparse_dense_matmul(sparse_indices, sparse_values, decoder_weight.T)
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output): #type: ignore
         sparse_indices, sparse_values, decoder_weight = ctx.saved_tensors
 
         assert grad_output.is_contiguous(), "grad_output must be contiguous; this is probably because the subsequent op was a .sum() or something like that, which returns a non contiguous gradient"
@@ -603,7 +603,7 @@ def mse(
             return out
 
         @staticmethod
-        def backward(ctx, grad_output):
+        def backward(ctx, grad_output): # type: ignore
             output, target = ctx.saved_tensors
             res = (output - target).float()
             res *= grad_output[:, None] * 2 / b

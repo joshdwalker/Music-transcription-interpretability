@@ -22,7 +22,7 @@ class Autoencoder(nn.Module):
     """
 
     def __init__(
-        self, n_latents: int, n_inputs: int, activation: Callable = nn.ReLU(), tied: bool = False,
+        self, n_latents: int, n_inputs: int, activation: nn.Module = nn.ReLU(), tied: bool = False,
         normalize: bool = False
     ) -> None:
         """
@@ -135,7 +135,7 @@ class Autoencoder(nn.Module):
 
     # Override state_dict to include activation class name and its state dict
     # Does not use the destination argument
-    def state_dict(self, destination: dict[str, Any] | None = None, prefix="", keep_vars=False):
+    def state_dict(self, destination: dict[str, Any] | None = None, prefix="", keep_vars=False): # type: ignore
         sd = super().state_dict(prefix=prefix, keep_vars=keep_vars)
         sd[prefix + "activation"] = self.activation.__class__.__name__
         if hasattr(self.activation, "state_dict"):
@@ -162,7 +162,7 @@ class TiedTranspose(nn.Module):
 
 
 class TopK(nn.Module):
-    def __init__(self, k: int, postact_fn: Callable = nn.ReLU()) -> None:
+    def __init__(self, k: int, postact_fn: nn.Module = nn.ReLU()) -> None:
         super().__init__()
         self.k = k
         self.postact_fn = postact_fn
@@ -175,7 +175,7 @@ class TopK(nn.Module):
         result.scatter_(-1, topk.indices, values)
         return result
 
-    def state_dict(self, destination: dict[str, Any] | None = None, prefix="", keep_vars=False):
+    def state_dict(self, destination: dict[str, Any] | None = None, prefix="", keep_vars=False): # type: ignore
         state_dict = super().state_dict(prefix=prefix, keep_vars=keep_vars)
         state_dict.update({prefix + "k": self.k, prefix + "postact_fn": self.postact_fn.__class__.__name__})
         return state_dict

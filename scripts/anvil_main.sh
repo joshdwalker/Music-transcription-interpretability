@@ -5,9 +5,9 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-node=1
-#SBATCH --mem=48G
+#SBATCH --mem=56G
 #SBATCH --job-name collect-muscriptor-activations
-#SBATCH -t 01:00:00  # 1 hour
+#SBATCH -t 24:00:00  # 24 hours
 
 module load conda
 conda activate .venv
@@ -23,3 +23,6 @@ pip install -r requirements.txt
 # Usage: python collect_actications.py /path/to/inputs /path/to/output_dir
 #      where inputs is a text file containing absolute paths to every input .wav
 python ./scripts/collect_activations.py slakh2100.txt activations
+
+# Train the model
+torchrun sparse_autoencoder/train.py

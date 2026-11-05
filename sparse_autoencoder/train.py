@@ -2,7 +2,7 @@
 # the main purpose of this code is to provide a reference implementation to compare
 # against when implementing our training methodology into other codebases, and to
 # demonstrate how sharding/DP can be implemented for autoencoders. some limitations:
-# - many basic features (e.g checkpointing, data loading, validation) are not implemented,
+# - many basic features (e.g. data loading, validation) are not implemented,
 # - the codebase is not designed to be extensible or easily hackable.
 # - this code is not guaranteed to run efficiently out of the box / in
 #   combination with other changes, so you should profile it and make changes as needed.
@@ -13,6 +13,7 @@
 
 import os
 import glob
+import shutil
 from dataclasses import dataclass
 from typing import Callable, Iterable, Iterator
 
@@ -22,7 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import triton
 import triton.language as tl
-from sparse_autoencoder.kernels import *
+from kernels import *
 from torch.distributed import ReduceOp
 
 RANK = int(os.environ.get("RANK", "0"))
@@ -555,10 +556,16 @@ class Logger:
 
 
 def training_loop_(
-    ae, train_acts_iter, loss_fn, lr, comms, eps=6.25e-10, clip_grad=None, ema_multiplier: float | None = 0.999, logger=None
+    ae, train_acts_iter, loss_fn, lr, comms, eps=6.25e-10, clip_grad=None,
+    ema_multiplier: float | None = 0.999, logger=None, checkpoint_dir="checkpoints",
+    checkpoint_interval: int | None = 1000, resume_from: str | None = None,
+    checkpoint_metadata=None,
 ):
     if logger is None:
         logger = Logger(dummy=True)
+
+    if checkpoint_interval is not None and checkpoint_interval <= 0:
+        raise ValueError("checkpoint_interval must be positive or None")
 
     scaler = torch.cuda.amp.GradScaler()
     autocast_ctx_manager = torch.cuda.amp.autocast()
@@ -568,7 +575,19 @@ def training_loop_(
     if ema_multiplier is not None:
         ema = EmaModel(ae, ema_multiplier=ema_multiplier)
 
+    start_step = 0
+    if resume_from is not None:
+        start_step = load_checkpoint(
+            resume_from, ae, opt, scaler, ema, comms, checkpoint_metadata
+        )
+
+    last_step = start_step
+    last_saved_step = None
     for i, flat_acts_train_batch in enumerate(train_acts_iter):
+        # no shuffling?
+        if i < start_step:
+            continue
+
         flat_acts_train_batch = flat_acts_train_batch.cuda()
 
         with autocast_ctx_manager:
@@ -614,6 +633,23 @@ def training_loop_(
         scaler.update()
         
         logger.dumpkvs()
+
+        last_step = i + 1
+        if checkpoint_interval is not None and last_step % checkpoint_interval == 0:
+            save_checkpoint(
+                checkpoint_dir, last_step, ae, opt, scaler, ema, comms,
+                checkpoint_metadata,
+            )
+            last_saved_step = last_step
+
+    if last_saved_step != last_step or (
+        resume_from is not None
+        and os.path.abspath(resume_from) != os.path.abspath(checkpoint_dir)
+    ):
+        save_checkpoint(
+            checkpoint_dir, last_step, ae, opt, scaler, ema, comms,
+            checkpoint_metadata,
+        )
 
 
 def init_from_data_(ae, stats_acts_sample, comms):
@@ -686,6 +722,102 @@ class EmaModel:
                 yield
 
 
+def save_checkpoint(
+    checkpoint_dir, step, ae, opt, scaler, ema, comms, checkpoint_metadata=None
+):
+    checkpoint_name = f"step_{step:012d}"
+    checkpoint_path = os.path.join(checkpoint_dir, checkpoint_name)
+    os.makedirs(checkpoint_path, exist_ok=True)
+
+    checkpoint = {
+        "step": step,
+        "n_replicas": comms.n_replicas,
+        "n_op_shards": comms.n_op_shards,
+        "metadata": checkpoint_metadata,
+        "model": ae.state_dict(),
+        "optimizer": opt.state_dict(),
+        "scaler": scaler.state_dict(),
+        "ema": (
+            None
+            if ema is None
+            else {
+                "weights": [weight.clone() for weight in ema.ema_weights],
+                "steps": ema.ema_steps,
+                "multiplier": ema.ema_multiplier,
+            }
+        ),
+    }
+    rank = comms._rank
+    rank_path = os.path.join(checkpoint_path, f"rank_{rank:05d}.pt")
+    temporary_rank_path = rank_path + ".tmp"
+    torch.save(checkpoint, temporary_rank_path)
+    os.replace(temporary_rank_path, rank_path)
+
+    if dist.is_initialized():
+        dist.barrier()
+
+    if rank == 0:
+        latest_path = os.path.join(checkpoint_dir, "latest")
+        temporary_latest_path = latest_path + ".tmp"
+        with open(temporary_latest_path, "w", encoding="utf-8") as latest_file:
+            latest_file.write(checkpoint_name)
+        os.replace(temporary_latest_path, latest_path)
+
+        for old_checkpoint in glob.glob(os.path.join(checkpoint_dir, "step_*")):
+            if old_checkpoint != checkpoint_path and os.path.isdir(old_checkpoint):
+                shutil.rmtree(old_checkpoint)
+
+    if dist.is_initialized():
+        dist.barrier()
+
+
+def load_checkpoint(
+    checkpoint_dir, ae, opt, scaler, ema, comms, checkpoint_metadata=None
+) -> int:
+    latest_path = os.path.join(checkpoint_dir, "latest")
+    with open(latest_path, encoding="utf-8") as latest_file:
+        checkpoint_name = latest_file.read().strip()
+    if (
+        not checkpoint_name.startswith("step_")
+        or os.path.basename(checkpoint_name) != checkpoint_name
+    ):
+        raise ValueError(f"Invalid checkpoint pointer in {latest_path}: {checkpoint_name!r}")
+
+    rank_path = os.path.join(
+        checkpoint_dir, checkpoint_name, f"rank_{comms._rank:05d}.pt"
+    )
+    checkpoint = torch.load(rank_path, map_location=next(ae.parameters()).device)
+    if (
+        checkpoint["n_replicas"] != comms.n_replicas
+        or checkpoint["n_op_shards"] != comms.n_op_shards
+    ):
+        raise ValueError("Checkpoint parallelism does not match the current training configuration")
+    if checkpoint["metadata"] != checkpoint_metadata:
+        raise ValueError("Checkpoint training data or batching does not match the current configuration")
+    if (checkpoint["ema"] is None) != (ema is None):
+        raise ValueError("Checkpoint EMA configuration does not match the current training configuration")
+
+    ae.load_state_dict(checkpoint["model"])
+    opt.load_state_dict(checkpoint["optimizer"])
+    scaler.load_state_dict(checkpoint["scaler"])
+    if ema is not None:
+        ema_state = checkpoint["ema"]
+        if ema.ema_multiplier != ema_state["multiplier"]:
+            raise ValueError("Checkpoint EMA multiplier does not match the current training configuration")
+        if len(ema.ema_weights) != len(ema_state["weights"]):
+            raise ValueError("Checkpoint EMA weights do not match the current model")
+        with torch.no_grad():
+            for weight, saved_weight in zip(
+                ema.ema_weights, ema_state["weights"], strict=True
+            ):
+                weight.copy_(saved_weight)
+        ema.ema_steps = ema_state["steps"]
+
+    step = checkpoint["step"]
+    print0(f"Resuming from checkpoint at step {step}")
+    return step
+
+
 @dataclass
 class Config:
     n_op_shards: int = 1
@@ -703,6 +835,10 @@ class Config:
     auxk_coef: float = 1 / 32
     dead_toks_threshold: int = 10_000_000
     ema_multiplier: float | None = None
+
+    checkpoint_dir: str = "checkpoints"
+    checkpoint_interval: int | None = 1000
+    resume_from: str | None = None
     
     wandb_project: str | None = None
     wandb_name: str | None = None
@@ -741,6 +877,17 @@ def main():
 
     n_dirs_local = cfg.n_dirs // cfg.n_op_shards
     bs_local = cfg.bs // cfg.n_replicas
+    checkpoint_metadata = {
+        "batch_size": bs_local,
+        "activation_files": [
+            {
+                "path": os.path.relpath(path),
+                "size": os.path.getsize(path),
+                "mtime_ns": os.stat(path).st_mtime_ns,
+            }
+            for path in activation_files
+        ],
+    }
 
     ae = FastAutoencoder(
         n_dirs_local=n_dirs_local,
@@ -796,6 +943,10 @@ def main():
         ema_multiplier=cfg.ema_multiplier,
         logger=logger,
         comms=comms,
+        checkpoint_dir=cfg.checkpoint_dir,
+        checkpoint_interval=cfg.checkpoint_interval,
+        resume_from=cfg.resume_from,
+        checkpoint_metadata=checkpoint_metadata,
     )
 
 
