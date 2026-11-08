@@ -21,8 +21,22 @@ pip install -r requirements.txt
 
 # Gilbreth
 # slakh2100.txt and slakh2100 should already be in the depot
-sbatch main.sh
+sbatch scripts/gilbreth/collect_activations.sh
 
 # Anvil
 # Ensure you have slakh2100.txt and slakh2100 in this project directory
-sbatch anvil_main.sh
+sbatch scripts/anvil/collect_activations.sh
+
+# Then, train the SAE
+# Gilbreth
+sbatch scripts/gilbreth/train.sh
+# Anvil
+sbatch scripts/anvil/train.sh
+
+# Then, explain the SAE
+# Gilbreth
+sbatch scripts/gilbreth/explain.sh
+# Anvil
+sbatch scripts/anvil/explain.sh
+
+# All done!
