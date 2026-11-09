@@ -17,15 +17,13 @@ pip install -r requirements.txt
      hf auth login --token <your_token>
 
 # Collect the activations which the SAE trains over
-# IMPORTANT: this only needs to be run ONCE ever; check if activations directory exists and is sufficiently full
-
 # Gilbreth
 # slakh2100.txt and slakh2100 should already be in the depot
 sbatch scripts/gilbreth/collect_activations.sh
 
 # Anvil
 # Ensure you have slakh2100.txt and slakh2100 in this project directory
-sbatch scripts/anvil/collect_activations.sh
+source scripts/anvil/batch_collect_activations.sh <number_of_jobs>
 
 # Then, train the SAE
 # Gilbreth

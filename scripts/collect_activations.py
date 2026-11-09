@@ -1,5 +1,7 @@
 # Usage: python collect_actications.py /path/to/inputs /path/to/output_dir
 #      where inputs is a text file containing absolute paths to every input .wav
+#      and start_index is the index of slakh2100 to start collecting activations over (default 0)
+#      and stop_index is the index to break at (default -1)
 # -Josh W (github joshdwalker)
 
 import os
@@ -10,33 +12,37 @@ import torch
 from muscriptor import TranscriptionModel
 
 # Ensure script is used correctly
-if len(sys.argv) != 3:
-    raise Exception(f'Usage: python {__file__[__file__.rindex("/") + 1 : ]} <path/to/inputs> <path/to/output_dir>')
+if len(sys.argv) != 3 and len(sys.argv) != 5:
+    raise Exception(f'Usage: python {__file__[__file__.rindex("/") + 1 : ]} <path/to/inputs> <path/to/output_dir> start_index stop_index')
 
 # Place each .pt file in activations dir from this repo
 output_dir = sys.argv[2]
 # Ensure the subdirectory (already or not) exists in this repo
 Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-def collect_text_paths(text_file, dir):
+def collect_text_paths(text_file, dir, start_index=0, stop_index=-1):
     output = []
 
     with open(text_file) as f:
         output = []
 
-        for line in f:
-            corresponding_pt_filename = line[line.rfind('/') + 1 : line.rfind('.')] + '.pt'
-
-            # Skip files already present in dir (activations)
-            if os.listdir(dir).__contains__(corresponding_pt_filename):
-                print(f'Already collected activations for {line}; {corresponding_pt_filename}')
+        for i, line in enumerate(f):
+            # Only consider files between start (inclusive) and stop (exclusive) indices
+            if i < start_index:
                 continue
+            if i == stop_index:
+                 break
 
             output.append(line.strip())
 
         return output
 
-text_paths = collect_text_paths(text_file=sys.argv[1], dir=output_dir)
+text_paths = collect_text_paths(
+    text_file=sys.argv[1],
+    dir=output_dir,
+    start_index=( int(sys.argv[3]) if len(sys.argv) == 5 else 0 ),
+    stop_index=( int(sys.argv[4]) if len(sys.argv) == 5 else -1 )
+)
 
 # Requires accepting Muscriptor's model license on Hugging Face.
 transcription_model = TranscriptionModel.load_model("large", device='cuda')
