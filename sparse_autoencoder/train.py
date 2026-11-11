@@ -7,8 +7,7 @@
 # - this code is not guaranteed to run efficiently out of the box / in
 #   combination with other changes, so you should profile it and make changes as needed.
 #
-# example launch command:
-#    torchrun --nproc-per-node 8 train.py
+# launched with 4 workers per node across 2 nodes via scripts/anvil/train.sh
 
 
 import os
@@ -188,12 +187,24 @@ def make_torch_comms(n_op_shards=4, n_replicas=2):
         assert n_replicas == 1
         return TRIVIAL_COMMS
 
-    # os.environ.get("RANK") should never return None; this is handled above
-    rank = int(os.environ.get("RANK", "0"))
-    world_size = int(os.environ.get("WORLD_SIZE", 1))
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(rank % 8)
+    rank = int(os.environ["RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    expected_world_size = n_op_shards * n_replicas
+    if world_size != expected_world_size:
+        raise ValueError(
+            f"Distributed world size {world_size} does not match configured "
+            f"parallelism ({n_replicas} replicas x {n_op_shards} op shards = "
+            f"{expected_world_size} processes)"
+        )
+    if not 0 <= local_rank < torch.cuda.device_count():
+        raise ValueError(
+            f"LOCAL_RANK={local_rank} is invalid for "
+            f"{torch.cuda.device_count()} visible CUDA devices"
+        )
 
-    print(f"{rank=}, {world_size=}")
+    torch.cuda.set_device(local_rank)
+    print(f"{rank=}, {world_size=}, {local_rank=}")
     dist.init_process_group("nccl")
 
     my_op_shard_idx = rank % n_op_shards
@@ -821,6 +832,7 @@ def load_checkpoint(
 @dataclass
 class Config:
     n_op_shards: int = 1
+    # Total data-parallel workers: 4 GPUs on each of 2 nodes.
     n_replicas: int = 8
 
     n_dirs: int = 32768
