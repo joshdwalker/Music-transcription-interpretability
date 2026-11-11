@@ -4,7 +4,7 @@
 #SBATCH -p gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --gpus-per-node=1
+#SBATCH --gpus-per-node=8
 #SBATCH --mem=56G
 #SBATCH --job-name train-muscriptor-sae
 #SBATCH -t 24:00:00  # 24 hours
@@ -21,4 +21,4 @@ export HF_HUB_CACHE=/anvil/scratch/x-jwalker5/Music-transcription-interpretabili
 pip install -r requirements.txt
 
 # Train the model
-torchrun sparse_autoencoder/train.py
+torchrun --nproc-per-node=8 sparse_autoencoder/train.py
