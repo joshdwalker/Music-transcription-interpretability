@@ -21,9 +21,17 @@ export HF_HUB_CACHE=/anvil/scratch/x-jwalker5/Music-transcription-interpretabili
 
 pip install -r requirements.txt
 
-# Train the model
+# Train with one torchrun agent per node. SLURM_PROCID provides each node's rank.
 MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 MASTER_PORT=$((10000 + SLURM_JOB_ID % 50000))
 export MASTER_ADDR MASTER_PORT
 
-torchrun --nnodes="$SLURM_NNODES" --nproc-per-node=4 --node_rank="$SLURM_PROCID" --master_addr="$MASTER_ADDR" --master_port="$MASTER_PORT" sparse_autoencoder/train.py
+srun --ntasks=2 --ntasks-per-node=1 bash -c '
+    exec torchrun \
+        --nnodes="$SLURM_NNODES" \
+        --nproc-per-node=4 \
+        --node_rank="$SLURM_PROCID" \
+        --master_addr="$MASTER_ADDR" \
+        --master_port="$MASTER_PORT" \
+        sparse_autoencoder/train.py
+'
