@@ -856,6 +856,27 @@ class Config:
     wandb_name: str | None = None
 
 
+def load_activations(path: str, d_model: int) -> torch.Tensor:
+    payload = torch.load(path, map_location="cpu")
+    if isinstance(payload, dict):
+        acts = payload.get("activations")
+        if not isinstance(acts, torch.Tensor):
+            raise TypeError(
+                f"Expected a tensor in the 'activations' entry of {path}, "
+                f"got {type(acts).__name__}"
+            )
+    else:
+        acts = payload
+        if not isinstance(acts, torch.Tensor):
+            raise TypeError(f"Expected a tensor in {path}, got {type(acts).__name__}")
+
+    if acts.shape[-1] != d_model:
+        raise ValueError(
+            f"Expected activations with final dimension {d_model}, got {tuple(acts.shape)}"
+        )
+    return acts.reshape(-1, d_model)
+
+
 def main():
     cfg = Config()
     comms = make_torch_comms(n_op_shards=cfg.n_op_shards, n_replicas=cfg.n_replicas)
@@ -864,21 +885,11 @@ def main():
     if not activation_files:
         raise FileNotFoundError("No activation .pt files found in the activations directory")
 
-    def load_activations(path):
-        acts = torch.load(path, map_location="cpu")
-        if not isinstance(acts, torch.Tensor):
-            raise TypeError(f"Expected a tensor in {path}, got {type(acts).__name__}")
-        if acts.shape[-1] != cfg.d_model:
-            raise ValueError(
-                f"Expected activations with final dimension {cfg.d_model}, got {tuple(acts.shape)}"
-            )
-        return acts.reshape(-1, cfg.d_model)
-
-    stats_acts_sample = load_activations(activation_files[0])[:32768]
+    stats_acts_sample = load_activations(activation_files[0], cfg.d_model)[:32768]
 
     def iter_activations():
         for path in activation_files:
-            acts = load_activations(path)
+            acts = load_activations(path, cfg.d_model)
             rows_per_replica = acts.shape[0] // cfg.n_replicas
             if rows_per_replica == 0:
                 continue
